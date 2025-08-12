@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Local Video Player (watch.html)</title>
+<style>
+  :root{
+    --bg-top:#f0f0f0; --bg-bot:#d0d0d0; --panel:#d0d0d0; --bevel:#c0c0c0;
+    --accent:#5f5fd7; --accent-2:#5f87d7; --text:#4e4e4e; --muted:#e4e4e4;
+  }
+  body{ margin:0; font-family:"Courier New",monospace; background:linear-gradient(to bottom,var(--bg-top),var(--bg-bot)); color:var(--text); display:flex; justify-content:center; padding:18px; min-height:100vh; }
+  body.dark{ --bg-top:#505050; --bg-bot:#303030; --panel:#4e4e4e; --bevel:#5f5f5f; --text:#d0d0d0; --muted:#3a3a3a; --accent:#5f87d7; --accent-2:#87afff; }
+
+  .app{ width:min(1200px,96vw); border:4px outset var(--bevel); background:var(--panel); padding:12px; box-shadow:4px 4px 12px rgba(0,0,0,.35); box-sizing:border-box; position:relative; }
+  header{ display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  h1{ margin:0; font-size:1.1rem; text-shadow:1px 1px 2px rgba(0,0,0,.12); }
+
+  .playerWrap{ margin-top:12px; display:flex; flex-direction:column; gap:10px; align-items:center; }
+  .playerBox{ width:100%; border:4px outset var(--bevel); background:black; aspect-ratio:16/9; position:relative; overflow:hidden; }
+  video{ width:100%; height:100%; display:block; background:black; }
+
+  #notePopup{ position:absolute; left:50%; transform:translateX(-50%); bottom:18%; display:none; z-index:20; background:var(--panel); border:2px outset var(--bevel); padding:8px 10px; box-shadow:3px 3px 8px rgba(0,0,0,.35); max-width:70%; word-wrap:break-word; }
+
+  .controlsRow{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; width:100%; justify-content:space-between; }
+  .leftControls,.rightControls{ display:flex; gap:8px; align-items:center; }
+  button{ padding:8px 10px; border:2px outset var(--bevel); background:var(--accent); color:var(--muted); cursor:pointer; font-weight:bold; }
+  button.ghost{ background:transparent; border:2px inset var(--bevel); color:var(--text); }
+  input[type="range"]{ width:220px; }
+  .fileList{ margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; width:100%; }
+  .fileItem{ background:var(--muted); padding:8px; border:1px solid var(--bevel); cursor:pointer; display:flex; gap:8px; align-items:center; min-width:160px; max-width:calc(33% - 12px); box-sizing:border-box; }
+  .fileItem.active{ outline:3px dashed rgba(95,95,215,0.18); }
+  .tiny{ font-size:0.9rem; color:var(--text); }
+
+  .modal{ display:none; position:fixed; inset:0; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:60; }
+  .modalInner{ width:min(820px,94vw); max-height:84vh; overflow:auto; background:var(--panel); border:4px outset var(--bevel); padding:12px; box-sizing:border-box; }
+  .section{ margin-bottom:12px; }
+  .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .list{ display:flex; flex-direction:column; gap:8px; }
+  .listItem{ background:var(--muted); padding:8px; border:1px solid var(--bevel); display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  .meta{ font-size:0.95rem; color:var(--text); max-width:72%; word-break:break-word; }
+  footer{ display:flex; justify-content:space-between; align-items:center; margin-top:8px; color:var(--text); font-size:0.9rem; }
+
+  @media (max-width:640px){ input[type="range"]{ width:140px } .fileItem{ max-width:calc(50% - 12px); } .meta{ max-width:60%; } }
+</style>
+</head>
+<body class="light">
+  <div class="app" role="application" aria-label="Seoul256 Local Video Player">
+    <header>
+      <h1>Local Player</h1>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <label for="themeSelect" class="tiny">Theme</label>
+        <select id="themeSelect">
+          <option value="light" selected>Seoul256 Light</option>
+          <option value="dark">Seoul256 Dark</option>
+        </select>
+      </div>
+    </header>
+
+    <div class="playerWrap">
+      <div class="playerBox" id="playerBox">
+        <video id="video" controls></video>
+        <div id="notePopup"></div>
+      </div>
+
+      <div class="controlsRow">
+        <div class="leftControls">
+          <button id="chooseFolder">Choose Folder</button>
+          <button id="addToLibrary" class="ghost">Add Video to Library</button>
+          <button id="libraryBtn">Open Library (L)</button>
+          <button id="notesBtn">Open Notes</button>
+        </div>
+
+        <div class="rightControls">
+          <label class="tiny">Width</label>
+          <input id="sizeRange" type="range" min="420" max="1400" value="860" />
+          <button id="fullscreenBtn" class="ghost">Fullscreen</button>
+        </div>
+      </div>
+
+      <div class="fileList" id="fileList" aria-live="polite" role="list"></div>
+
+      <div class="controlsRow" style="margin-top:6px;">
+        <div class="leftControls">
+          <button id="rewind">◀◀ 5s</button>
+          <button id="playPause">Play</button>
+          <button id="forward">5s ▶▶</button>
+          <button id="loopToggle" class="ghost">Loop: Off</button>
+          <button id="addNoteBtn" class="ghost">Add Note (N)</button>
+        </div>
+        <div class="rightControls tiny">
+          <div id="currentFileLabel">No file</div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div class="tiny">library.json & notes.json will be created/updated inside the chosen folder. Use Chrome/Edge for full functionality.</div>
+      <div class="tiny">Keyboard: <strong>N</strong> add note • <strong>L</strong> open library • <strong>↑/↓</strong> resize</div>
+    </footer>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal" id="modal">
+    <div class="modalInner" role="dialog" aria-modal="true" aria-label="Library and Notes">
+      <h2 id="modalTitle">Library & Notes</h2>
+
+      <div class="section">
+        <h3>Library (library.json)</h3>
+        <div class="row">
+          <button id="saveLibrary">Save library.json</button>
+          <button id="importLibrary" class="ghost">Import library.json</button>
+          <button id="rescan" class="ghost">Rescan folder</button>
+        </div>
+        <div id="libraryList" class="list" style="margin-top:8px"></div>
+      </div>
+
+      <div class="section">
+        <h3>Notes (notes.json)</h3>
+        <div class="row">
+          <button id="saveNotes">Save notes.json</button>
+          <button id="importNotes" class="ghost">Import notes.json</button>
+        </div>
+        <div id="notesList" class="list" style="margin-top:8px"></div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+        <button id="closeModal" class="ghost">Close</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+  watch.html
+  - library.json: [{ filename, name }, ...] saved in chosen folder
+  - notes.json: { "<filename>": [ { timestamp, note }, ... ] }
+  - Add Video to Library: copy selected file(s) into chosen folder (so library points to files inside folder)
+  - Works best in Chromium browsers (showDirectoryPicker). Fallbacks -> import/export for JSONs and local file play.
+*/
+
+const chooseFolderBtn = document.getElementById('chooseFolder');
+const addToLibraryBtn = document.getElementById('addToLibrary');
+const libraryBtn = document.getElementById('libraryBtn');
+const notesBtn = document.getElementById('notesBtn');
+const modal = document.getElementById('modal');
+const closeModal = document.getElementById('closeModal');
+const libraryList = document.getElementById('libraryList');
+const notesList = document.getElementById('notesList');
+const saveLibraryBtn = document.getElementById('saveLibrary');
+const importLibraryBtn = document.getElementById('importLibrary');
+const rescanBtn = document.getElementById('rescan');
+const saveNotesBtn = document.getElementById('saveNotes');
+const importNotesBtn = document.getElementById('importNotes');
+
+const fileListEl = document.getElementById('fileList');
+const sizeRange = document.getElementById('sizeRange');
+const playerBox = document.getElementById('playerBox');
+const videoEl = document.getElementById('video');
+const notePopup = document.getElementById('notePopup');
+const currentFileLabel = document.getElementById('currentFileLabel');
+
+const rewindBtn = document.getElementById('rewind');
+const playPauseBtn = document.getElementById('playPause');
+const forwardBtn = document.getElementById('forward');
+const loopToggle = document.getElementById('loopToggle');
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+const addNoteBtn = document.getElementById('addNoteBtn');
+
+const themeSelect = document.getElementById('themeSelect');
+
+let dirHandle = null;
+let library = []; // { filename, name }
+let notes = {};   // { filename: [ {timestamp, note}, ... ] }
+let fileHandles = {}; // filename -> FileSystemFileHandle (when scanned)
+let currentFilename = null;
+let lastTime = 0;
+let popupTimer = null;
+let loopOn = false;
+
+const LIB_FILE = 'library.json';
+const NOTES_FILE = 'notes.json';
+
+function supportsFS() { return 'showDirectoryPicker' in window; }
+function setStatus(s) { currentFileLabel.textContent = s; }
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function formatTime(s){ const m=Math.floor(s/60); const sec=Math.floor(s%60); return `${m}:${sec<10?'0':''}${sec}`; }
+
+chooseFolderBtn.addEventListener('click', async () => {
+  if (!supportsFS()) { alert('Your browser does not support folder access. Use Chrome/Edge for full functionality.'); return; }
+  try {
+    dirHandle = await window.showDirectoryPicker();
+    await loadOrCreateJsons();
+    await scanFolder();
+    renderFileList();
+    setStatus('Folder: ' + (dirHandle.name || 'selected'));
+  } catch(err) {
+    console.warn('Folder pick canceled', err);
+  }
+});
+
+async function loadOrCreateJsons() {
+  if (!dirHandle) return;
+  try {
+    // library.json
+    try {
+      const libH = await dirHandle.getFileHandle(LIB_FILE, { create: true });
+      const libFile = await libH.getFile();
+      const txt = await libFile.text().catch(()=> '');
+      library = txt ? JSON.parse(txt) : [];
+    } catch(e) { library = []; }
+
+    // notes.json
+    try {
+      const notesH = await dirHandle.getFileHandle(NOTES_FILE, { create: true });
+      const notesFile = await notesH.getFile();
+      const txt = await notesFile.text().catch(()=> '');
+      notes = txt ? JSON.parse(txt) : {};
+    } catch(e) { notes = {}; }
+  } catch(e) {
+    console.error('loadOrCreateJsons error', e);
+    library = library || [];
+    notes = notes || {};
+  }
+}
+
+async function scanFolder() {
+  fileHandles = {};
+  if (!dirHandle) return;
+  for await (const [name, handle] of dirHandle.entries()) {
+    if (handle.kind === 'file' && name.match(/\.(mp4|webm|mkv|mov|ogg)$/i)) {
+      fileHandles[name] = handle;
+      // auto-add missing library entries
+      if (!library.find(x => x.filename === name)) {
+        library.push({ filename: name, name });
+      }
+    }
+  }
+  const seen = new Set(); library = library.filter(e => (seen.has(e.filename) ? false : seen.add(e.filename)));
+  renderLibraryList();
+}
+
+addToLibraryBtn.addEventListener('click', async () => {
+  if (!dirHandle) return alert('Choose a folder first (Choose Folder).');
+  try {
+    const [fileHandle] = await window.showOpenFilePicker({ multiple:false, types:[{description:'Video', accept:{'video/*':['.mp4','.webm','.mkv','.mov','.ogg']}}] });
+    const file = await fileHandle.getFile();
+    const targetName = file.name;
+    const targetHandle = await dirHandle.getFileHandle(targetName, { create: true });
+    const writable = await targetHandle.createWritable();
+    await writable.write(await file.arrayBuffer());
+    await writable.close();
+    fileHandles[targetName] = targetHandle;
+    if (!library.find(x => x.filename === targetName)) {
+      library.unshift({ filename: targetName, name: targetName });
+    }
+    await saveLibraryJson();
+    await saveNotesJson();
+    renderFileList();
+    renderLibraryList();
+    setStatus('Added to library: ' + targetName);
+  } catch(err) {
+    console.warn('Add to library canceled or failed', err);
+    setStatus('Add canceled');
+  }
+});
+
+async function saveLibraryJson() {
+  if (!dirHandle) { downloadJson(library, LIB_FILE); return; }
+  try {
+    const h = await dirHandle.getFileHandle(LIB_FILE, { create: true });
+    const w = await h.createWritable();
+    await w.write(JSON.stringify(library, null, 2));
+    await w.close();
+    setStatus('library.json saved');
+  } catch(e){ console.error(e); alert('Failed to save library.json'); }
+}
+async function saveNotesJson() {
+  if (!dirHandle) { downloadJson(notes, NOTES_FILE); return; }
+  try {
+    const h = await dirHandle.getFileHandle(NOTES_FILE, { create: true });
+    const w = await h.createWritable();
+    await w.write(JSON.stringify(notes, null, 2));
+    await w.close();
+    setStatus('notes.json saved');
+  } catch(e){ console.error(e); alert('Failed to save notes.json'); }
+}
+function downloadJson(obj, name) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+}
+
+libraryBtn.addEventListener('click', () => showModal('library'));
+notesBtn.addEventListener('click', () => showModal('notes'));
+closeModal.addEventListener('click', hideModal);
+
+saveLibraryBtn.addEventListener('click', saveLibraryJson);
+importLibraryBtn.addEventListener('click', () => importJson((v) => { if (!Array.isArray(v)) return alert('Bad library format'); library = v; renderLibraryList(); renderFileList(); }));
+rescanBtn.addEventListener('click', async () => { if (!dirHandle) return alert('Choose folder first'); await scanFolder(); renderFileList(); });
+
+saveNotesBtn.addEventListener('click', saveNotesJson);
+importNotesBtn.addEventListener('click', () => importJson((v) => { notes = v || {}; renderNotesList(); }));
+
+function showModal(tab='library') {
+  document.getElementById('modalTitle').textContent = tab === 'library' ? 'Library' : 'Notes';
+  document.getElementById('modal').style.display = 'flex';
+  if (tab === 'library') renderLibraryList(); else renderNotesList();
+}
+function hideModal() { document.getElementById('modal').style.display = 'none'; }
+
+function renderFileList() {
+  fileListEl.innerHTML = '';
+  // show library entries
+  library.forEach(entry => {
+    const div = document.createElement('div');
+    div.className = 'fileItem' + ((currentFilename === entry.filename) ? ' active' : '');
+    div.innerHTML = `<div class="meta">${escapeHtml(entry.name)}</div><div class="tiny">${escapeHtml(entry.filename)}</div>`;
+    div.onclick = () => openLibraryFile(entry.filename);
+    fileListEl.appendChild(div);
+  });
+}
+
+function renderLibraryList() {
+  libraryList.innerHTML = '';
+  if (!library.length) { libraryList.innerHTML = '<div class="tiny">No videos in library.</div>'; return; }
+  library.forEach((e, i) => {
+    const li = document.createElement('div');
+    li.className = 'listItem';
+    li.innerHTML = `<div class="meta">${escapeHtml(e.name)}<div class="tiny">${escapeHtml(e.filename)}</div></div>
+                    <div style="display:flex;gap:8px">
+                      <button class="ghost" data-i="${i}" data-action="open">Open</button>
+                      <button class="ghost" data-i="${i}" data-action="rename">Rename</button>
+                      <button class="ghost" data-i="${i}" data-action="remove">Remove</button>
+                    </div>`;
+    libraryList.appendChild(li);
+  });
+  libraryList.querySelectorAll('button').forEach(b => b.addEventListener('click', async (ev) => {
+    const i = Number(b.dataset.i);
+    const action = b.dataset.action;
+    if (action === 'open') { hideModal(); openLibraryFile(library[i].filename); }
+    else if (action === 'rename') {
+      const name = prompt('New display name', library[i].name);
+      if (name) { library[i].name = name; await saveLibraryJson(); renderLibraryList(); renderFileList(); }
+    } else if (action === 'remove') {
+      if (!confirm('Remove from library? (This does NOT delete the file)')) return;
+      library.splice(i,1);
+      await saveLibraryJson();
+      renderLibraryList();
+      renderFileList();
+    }
+  }));
+}
+
+function renderNotesList() {
+  notesList.innerHTML = '';
+  const keys = Object.keys(notes).sort();
+  if (keys.length === 0) { notesList.innerHTML = '<div class="tiny">No notes yet.</div>'; return; }
+  keys.forEach(fn => {
+    const item = document.createElement('div');
+    item.className = 'listItem';
+    item.innerHTML = `<div class="meta"><strong>${escapeHtml(fn)}</strong><div class="tiny">${(notes[fn]||[]).length} notes</div></div>
+                      <div style="display:flex;gap:8px">
+                        <button class="ghost" data-fn="${fn}" data-action="open">Open</button>
+                        <button class="ghost" data-fn="${fn}" data-action="del">Delete all</button>
+                      </div>`;
+    notesList.appendChild(item);
+  });
+  notesList.querySelectorAll('button').forEach(b => b.addEventListener('click', async () => {
+    const fn = b.dataset.fn; const action = b.dataset.action;
+    if (action === 'open') { showNotesFor(fn); }
+    else if (action === 'del') {
+      if (!confirm('Delete all notes for ' + fn + '?')) return;
+      delete notes[fn];
+      await saveNotesJson();
+      renderNotesList();
+    }
+  }));
+}
+
+async function openLibraryFile(filename) {
+  if (!dirHandle) return alert('Choose folder first');
+  try {
+    const handle = fileHandles[filename] || await dirHandle.getFileHandle(filename);
+    const file = await handle.getFile();
+    const url = URL.createObjectURL(file);
+    videoEl.src = url;
+    currentFilename = filename;
+    // ensure notes entry exists
+    if (!notes[filename]) notes[filename] = [];
+    renderFileList();
+    setStatus('Playing: ' + filename);
+  } catch(e) {
+    console.error('openLibraryFile error', e);
+    alert('Failed to open file. Try rescanning folder.');
+  }
+}
+
+addNoteBtn.addEventListener('click', addNoteForCurrent);
+async function addNoteForCurrent() {
+  if (!currentFilename) return alert('Open a file first to add a note.');
+  const text = prompt('Note for ' + currentFilename + ' at ' + formatTime(videoEl.currentTime));
+  if (!text) return;
+  notes[currentFilename] = notes[currentFilename] || [];
+  notes[currentFilename].push({ timestamp: Math.floor(videoEl.currentTime), note: text });
+  notes[currentFilename].sort((a,b) => a.timestamp - b.timestamp);
+  await saveNotesJson();
+  renderNotesList();
+  setStatus('Note added');
+}
+
+function showNotesFor(filename) {
+  const arr = notes[filename] || [];
+  notesList.innerHTML = '';
+  const header = document.createElement('div');
+  header.className = 'tiny';
+  header.innerHTML = `<strong>Notes for:</strong> ${escapeHtml(filename)}`;
+  notesList.appendChild(header);
+  if (!arr.length) {
+    const empty = document.createElement('div'); empty.className='tiny'; empty.textContent='No notes for this file.'; notesList.appendChild(empty);
+  } else {
+    arr.forEach((n, i) => {
+      const r = document.createElement('div'); r.className='listItem';
+      r.innerHTML = `<div class="meta"><strong>${formatTime(n.timestamp)}</strong><div>${escapeHtml(n.note)}</div></div>
+                     <div style="display:flex;gap:8px">
+                       <button class="ghost" data-i="${i}">Go</button>
+                       <button class="ghost" data-i="${i}">Delete</button>
+                     </div>`;
+      const [goBtn, delBtn] = r.querySelectorAll('button');
+      goBtn.addEventListener('click', () => { if (videoEl.src && currentFilename===filename) { videoEl.currentTime = n.timestamp; videoEl.play(); hideModal(); } else { openLibraryFile(filename); hideModal(); setTimeout(()=>{ videoEl.currentTime = n.timestamp; videoEl.play(); }, 300); } });
+      delBtn.addEventListener('click', async () => { arr.splice(i,1); notes[filename] = arr; await saveNotesJson(); renderNotesList(); showModal('notes'); });
+      notesList.appendChild(r);
+    });
+  }
+  const back = document.createElement('button'); back.className='ghost'; back.textContent='Back'; back.onclick = () => renderNotesList();
+  notesList.appendChild(back);
+}
+
+function importJson(callback) {
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='.json,application/json';
+  inp.onchange = async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const txt = await f.text();
+    try { const val = JSON.parse(txt); callback(val); setStatus('Imported ' + f.name); } catch(e) { alert('Invalid JSON'); }
+  };
+  inp.click();
+}
+
+rewindBtn.addEventListener('click', () => { videoEl.currentTime = Math.max(0, videoEl.currentTime - 5); });
+forwardBtn.addEventListener('click', () => { videoEl.currentTime = Math.min(videoEl.duration || Infinity, videoEl.currentTime + 5); });
+playPauseBtn.addEventListener('click', () => { if (videoEl.paused) { videoEl.play(); playPauseBtn.textContent='Pause'; } else { videoEl.pause(); playPauseBtn.textContent='Play'; } });
+loopToggle.addEventListener('click', () => { loopOn = !loopOn; videoEl.loop = loopOn; loopToggle.textContent = 'Loop: ' + (loopOn ? 'On' : 'Off'); });
+fullscreenBtn.addEventListener('click', async () => { try { await playerBox.requestFullscreen(); } catch(e){} });
+
+videoEl.addEventListener('timeupdate', () => {
+  if (!currentFilename) { lastTime = videoEl.currentTime; return; }
+  const arr = notes[currentFilename] || [];
+  arr.forEach(n => {
+    if (lastTime < n.timestamp && videoEl.currentTime >= n.timestamp) showPopup(n.note);
+  });
+  lastTime = videoEl.currentTime;
+});
+function showPopup(txt) {
+  notePopup.innerHTML = escapeHtml(txt);
+  notePopup.style.display = 'block';
+  clearTimeout(popupTimer);
+  popupTimer = setTimeout(()=>{ notePopup.style.display = 'none'; }, 3500);
+}
+
+sizeRange.addEventListener('input', (e) => {
+  const px = e.target.value + 'px';
+  playerBox.style.maxWidth = px;
+  playerBox.style.width = px;
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'N' || e.key === 'n') addNoteForCurrent();
+  if (e.key === 'L' || e.key === 'l') libraryBtn.click();
+  if (e.key === 'ArrowUp') { sizeRange.value = Math.min(1400, Number(sizeRange.value) + 40); sizeRange.dispatchEvent(new Event('input')); }
+  if (e.key === 'ArrowDown') { sizeRange.value = Math.max(420, Number(sizeRange.value) - 40); sizeRange.dispatchEvent(new Event('input')); }
+});
+
+themeSelect.addEventListener('change', (e) => { document.body.className = e.target.value === 'dark' ? 'dark' : 'light'; });
+
+(async function init(){
+  renderFileList(); renderLibraryList(); renderNotesList();
+  setStatus('Ready — choose folder to use library.json / notes.json (Chromium browsers recommended)');
+})();
+</script>
+</body>
+</html>
